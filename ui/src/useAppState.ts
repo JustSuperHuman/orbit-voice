@@ -52,7 +52,7 @@ export type Settings = {
 
 /** voiceWarming: Claude voice's speech is loading and warming up (a call started now waits for it). */
 export type OpenAIStatus = { policy: Settings["openaiKeySource"]; savedPresent: boolean; systemAvailable: boolean; systemSource: "process" | "user" | "machine" | null; effectiveSource: "saved" | "process" | "user" | "machine" | null; available: boolean; pending: boolean; error: "saved-unreadable" | "system-invalid" | "system-read-failed" | null; systemError: "system-invalid" | "system-read-failed" | null };
-export type AppConfig = { version: string; hasKey: boolean; hasXaiKey?: boolean; hasOpenAIKey?: boolean; openai?: OpenAIStatus; externalHost?: { selected: boolean; connected: boolean; capabilities: string[]; name: string } | null; keyStorage: string; settings: Settings; voiceWarming?: boolean };
+export type AppConfig = { version: string; hasKey: boolean; hasXaiKey?: boolean; hasOpenAIKey?: boolean; openai?: OpenAIStatus; externalHost?: { selected: boolean; connected: boolean; capabilities: string[]; name: string | null } | null; keyStorage: string; settings: Settings; voiceWarming?: boolean };
 export type Finished = { id: string; title: string; summary: string; at: number };
 
 export async function postJson(url: string, body: object) {

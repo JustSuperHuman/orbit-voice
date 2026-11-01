@@ -38,7 +38,7 @@ const PRELOAD = path.join(HERE, 'preload.cjs');
 const ICON = path.join(ROOT, 'assets', 'icon.png');
 const TRAY_ICON = path.join(ROOT, 'assets', 'tray.png');
 const ORB_SIZE = 128;
-const MANAGED = process.argv.includes('--bro-managed');
+const MANAGED = process.argv.includes('--host-managed');
 const START_HIDDEN = process.argv.includes('--background'); // used by "Start with Windows"
 const LOGIN_LABEL = 'Start with Windows';
 /** Started quietly (as the orb): "--background", from "Start with Windows". */
@@ -51,11 +51,11 @@ if (!app.isPackaged && process.env.GVB_FAKE_MIC) {
   app.commandLine.appendSwitch('use-fake-device-for-media-stream');
   app.commandLine.appendSwitch('use-file-for-fake-audio-capture', process.env.GVB_FAKE_MIC);
 }
-if (process.platform === 'win32') app.setAppUserModelId('dev.justsuperhuman.orbit.bro-preview');
-app.setPath('userData', path.join(app.getPath('appData'), 'OrbitBroPreview'));
+if (process.platform === 'win32') app.setAppUserModelId('dev.orbit.voice.companion');
+app.setPath('userData', path.join(app.getPath('appData'), 'OrbitCompanion'));
 // Developer testing only (never in the installed app): a settings folder of its own, so a test run
 // never touches your real Orbit settings, keys or logs.
-if (!app.isPackaged && process.env.ORBIT_BRO_PREVIEW_USER_DATA) app.setPath('userData', path.resolve(process.env.ORBIT_BRO_PREVIEW_USER_DATA));
+if (!app.isPackaged && process.env.ORBIT_COMPANION_USER_DATA) app.setPath('userData', path.resolve(process.env.ORBIT_COMPANION_USER_DATA));
 
 let main = null;
 let orb = null;
@@ -81,7 +81,7 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   app.on('second-instance', (_event, argv) => {
-    if (MANAGED || argv.includes('--bro-managed')) {
+    if (MANAGED || argv.includes('--host-managed')) {
       let same = false;
       try { const file = descriptorPath(argv, {}); same = MANAGED && !!file && fs.realpathSync(file) === trustedPairingPath; } catch {}
       if (!same) { logWarn('app', 'A differently paired launch was not adopted.'); return; }
@@ -168,7 +168,7 @@ function createMain() {
     icon: ICON,
     show: false,
     skipTaskbar: MANAGED,
-    webPreferences: { ...secureWebPreferences, additionalArguments: MANAGED ? ['--bro-managed-ui'] : [] },
+    webPreferences: { ...secureWebPreferences, additionalArguments: MANAGED ? ['--host-managed-ui'] : [] },
   });
   lockDown(main);
   main.loadURL(authUrl(process.argv.includes('--open-settings') ? 'settings' : 'main')); // signs the window in, then shows the UI
@@ -785,7 +785,7 @@ app.whenReady().then(async () => {
     }
   } catch (e) {
     logError('app', 'Bridge failed to start', e?.message);
-    if (MANAGED) return app.quit(); // bro reports readiness failure; hidden startup never steals focus
+    if (MANAGED) return app.quit(); // the host reports readiness failure; hidden startup never steals focus
     dialog.showErrorBox(
       'Orbit',
       e.code === 'EADDRINUSE' ? 'Port 4317 is already in use, probably by another copy of Orbit. Close it first.' : String(e.message || e),
@@ -799,7 +799,7 @@ app.whenReady().then(async () => {
   app.on('web-contents-created', (_e, wc) => wc.on('will-attach-webview', (ev) => ev.preventDefault()));
 
   if (MANAGED) {
-    const manifest = fs.readFileSync(path.join(ROOT, 'orbit-bro-compatibility.json'));
+    const manifest = fs.readFileSync(path.join(ROOT, 'orbit-host-compatibility.json'));
     managedRuntime = createManagedRuntime({
       host: externalHost(),
       identity: { pid: process.pid, buildId: crypto.createHash('sha256').update(manifest).digest('hex') },

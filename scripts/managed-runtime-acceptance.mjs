@@ -1,5 +1,5 @@
 // Real hidden Electron/React/server, a protected loopback host and fake audio/provider.
-// This driver never pairs with a running Bro, touches a real microphone or uses a real API key.
+// This driver never pairs with a running host, touches a real microphone or uses a real API key.
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -20,18 +20,18 @@ const lineage = crypto.randomUUID();
 let epoch = crypto.randomUUID(), status = null, statusEpoch = null, child = null, exit = null;
 let intentionalStop = false, stopped = false;
 const commands = new Map();
-const capabilities = ['sessions.read', 'orchestrator.submit', 'requests.observe', 'voice.lifecycle.v1', 'bro.tools.v1'];
+const capabilities = ['sessions.read', 'orchestrator.submit', 'requests.observe', 'voice.lifecycle.v1', 'tools.v1'];
 const catalog = { schema: 1, revision: 'fixture-v1', tools: ['read_session', 'read_chat', 'coordination_snapshot', 'coordination_task'].map((name) => ({
-  name, effect: 'read', capability: 'bro.tools.v1', schemaVersion: 1,
-  description: 'Read only fixture data.', scope: 'pinned-project', inputSchema: { type: 'object', additionalProperties: false, properties: {} },
+  name, effect: 'read',
+  description: 'Read only fixture data.', scope: 'pinned', inputSchema: { type: 'object', additionalProperties: false, properties: {} },
 })) };
 const server = http.createServer(async (request, response) => {
   const json = (code, body) => { response.writeHead(code, { 'content-type': 'application/json' }); response.end(JSON.stringify(body)); };
   if (request.headers.authorization !== `Bearer ${token}`) return json(401, { error: 'fixture authentication required' });
   const route = new URL(request.url, 'http://127.0.0.1').pathname;
-  if (request.method === 'GET' && route === '/orbit/v1/host') return json(200, { protocol: 1, instanceId: epoch, name: 'bro',
+  if (request.method === 'GET' && route === '/orbit/v1/host') return json(200, { protocol: 1, instanceId: epoch, name: 'Fixture host',
     lineage, ownerEpoch: epoch, mode: 'attached', window: null, focusedSessionId: null, sessions: [], capabilities, toolCatalogRevision: catalog.revision });
-  if (request.method === 'GET' && route === '/orbit/v1/tools') return json(200, catalog);
+  if (request.method === 'GET' && route === '/orbit/v1/tools/catalog') return json(200, catalog);
   if (request.method === 'GET' && route === '/orbit/v1/events') return json(200, { events: [], cursor: 0, gap: false });
   if (request.method === 'POST' && route === '/orbit/v1/runtime/heartbeat') {
     try {
@@ -89,7 +89,7 @@ try {
   const stdout = fs.openSync(path.join(evidence, 'stdout.log'), 'w'), stderr = fs.openSync(path.join(evidence, 'stderr.log'), 'w');
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
-  child = spawn(electron, [path.join(root, 'scripts/managed-runtime-e2e.mjs'), '--bro-managed', '--external-host-file', descriptor,
+  child = spawn(electron, [path.join(root, 'scripts/managed-runtime-e2e.mjs'), '--host-managed', '--external-host-file', descriptor,
     '--acceptance-dir', evidence], { cwd: root, env, windowsHide: true, stdio: ['ignore', stdout, stderr] });
   fs.closeSync(stdout); fs.closeSync(stderr);
   child.on('exit', (code, signal) => { exit = { code, signal }; });

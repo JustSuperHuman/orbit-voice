@@ -1,6 +1,6 @@
 ## Local bro compatibility preview
 
-This branch adds an optional external-host adapter and OpenAI realtime voice. Download the [Windows x64 companion preview](https://github.com/JustSuperHuman/orbit-voice/releases/tag/bro-preview-v1.3.0.2), extract it and run `install-bro-preview.ps1` to register it with Bro. It includes its own runtime. Qubit shows the mic state beside him, with Start/Stop controls; double-click him for settings or drag him to move. Stock Orbit downloads below use a separate connection. Setup, the wire contract, verification results and platform limitations are in [External host integration](docs/EXTERNAL-HOST.md).
+This branch adds an optional external-host adapter and OpenAI realtime voice. Download the [Windows x64 companion preview](https://github.com/JustSuperHuman/orbit-voice/releases/tag/bro-preview-v1.3.0.3), extract it and run `install-bro-preview.ps1` to register it with Bro. It includes its own runtime. Qubit shows the mic state beside him, with Start/Stop controls; double-click him for settings or drag him to move. Stock Orbit downloads below use a separate connection. Setup, the wire contract, verification results and platform limitations are in [External host integration](docs/EXTERNAL-HOST.md).
 
 The original Orbit documentation and attribution follow.
 

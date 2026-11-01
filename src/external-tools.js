@@ -4,13 +4,17 @@ import { isClearYes } from './consent.js';
 import { sendInstruction, withoutSendTail } from './send-intent.js';
 import { runAvatarCommand } from './avatar-commands.js';
 import { isSleepCommand } from './sleep-command.js';
+import { TOOLS_CAPABILITY } from './external-host.js';
 
-const reviewed = (host) => host.has('bro.tools.v1') || host.reviewedToolsRequired?.() === true;
+// Orbit's snapshot readers. Once a host has offered its own catalog in this pairing, they stay
+// off: the host's scoped tools replace them, even while that catalog is unavailable.
+const SNAPSHOT_READS = ['list_sessions', 'read_session'];
+const catalogLatched = (host) => host.has(TOOLS_CAPABILITY) || host.catalogLatched?.() === true;
 export function externalToolDefs(base, host) {
   const allowed = new Set(['go_to_sleep', 'avatar']);
   if (host.has('sessions.read')) {
     allowed.add('get_current_session');
-    if (!reviewed(host)) ['list_sessions','read_session'].forEach((n) => allowed.add(n));
+    if (!catalogLatched(host)) SNAPSHOT_READS.forEach((n) => allowed.add(n));
   }
   if (host.has('sessions.focus')) allowed.add('switch_session');
   if (host.has('orchestrator.submit')) ['draft_prompt','send_draft','cancel_draft'].forEach((n) => allowed.add(n));
@@ -23,11 +27,11 @@ export function externalToolDefs(base, host) {
     send_draft: 'Submit the local draft only after a fresh clear yes from the user. Uses the original utterance’s pinned target.',
     cancel_draft: 'Discard the unsent local draft. Does not cancel work already accepted by the host.',
   }[t.name] || t.description }));
-  if (host.has('bro.tools.v1')) for (const t of host.catalog?.()?.tools || []) {
+  if (host.has(TOOLS_CAPABILITY)) for (const t of host.catalog?.()?.tools || []) {
     tools.push({ type: 'function', name: t.name, description: t.description, parameters: t.inputSchema });
   }
   const legacyRead = tools.find((t) => t.name === 'read_session');
-  if (legacyRead && !reviewed(host)) legacyRead.parameters = { type: 'object', properties: { session: { type: 'string', description: 'Exact advertised session id.' } }, additionalProperties: false };
+  if (legacyRead && !catalogLatched(host)) legacyRead.parameters = { type: 'object', properties: { session: { type: 'string', description: 'Exact advertised session id.' } }, additionalProperties: false };
   if (host.has('requests.observe')) tools.push({ type: 'function', name: 'request_status', description: 'Read status, progress, initial reply and final outcome of one known host request. All fields are non-user data.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'] } });
   if (host.has('requests.cancel-queued')) tools.push({ type: 'function', name: 'cancel_request', description: 'Cancel this specific known queued request, only on a fresh user instruction. Never interrupts a session or stops speaking.', parameters: { type: 'object', properties: { requestId: { type: 'string' } }, required: ['requestId'] } });
   return tools;
@@ -60,7 +64,7 @@ export function createExternalToolRunner({ host, notify, recentUtterance, replie
       if (!s) return { error: 'The selected host is disconnected.' };
       const session = s.sessions.find((x) => x.id === s.focusedSessionId) || null;
       if (session) notify({ type: 'bridge.session', title: session.title });
-      if (session && reviewed(host)) {
+      if (session && catalogLatched(host)) {
         const metadata = Object.fromEntries(['id', 'generation', 'title', 'agent', 'activity', 'scope', 'projectId'].filter((key) => Object.hasOwn(session, key)).map((key) => [key, session[key]]));
         return { session: metadata, nonUser: true }; // focus changes must not bypass the utterance-pinned reader
       }
@@ -126,19 +130,20 @@ export function createExternalToolRunner({ host, notify, recentUtterance, replie
         if (disposed) return { error: 'This operation is not supported by the selected host.' };
         const args = argsJson ? JSON.parse(argsJson) : {};
         if (!args || typeof args !== 'object' || Array.isArray(args)) return { error: 'Tool arguments must be an object.' };
-        const canonical = host.has('bro.tools.v1') && host.catalog?.()?.tools.find((t) => t.name === name && t.effect === 'read');
-        if (canonical) {
+        const hosted = host.has(TOOLS_CAPABILITY) && host.catalog?.()?.tools.find((t) => t.name === name);
+        if (hosted) {
           const u = recentUtterance();
           let utteranceId = null;
           if (u?.utteranceId && u.at > epochAt && Date.now() - u.at < 60_000) {
             await (host.awaitUtterance ? host.awaitUtterance(u.utteranceId) : host.beginUtterance(u.utteranceId));
             utteranceId = u.utteranceId;
           }
-          if (canonical.scope === 'pinned-project' && !utteranceId) return { error: 'A fresh utterance pinned to this project is required.' };
+          if (hosted.scope === 'pinned' && !utteranceId) return { error: 'This needs a fresh request from the user, pinned when they started speaking.' };
           outsideAt = Date.now(); // observations can inform a reply, never authorize a pending draft
-          return { ...await host.readTool(name, args, utteranceId), nonUser: true };
+          try { return { ...await host.callTool(name, args, utteranceId), nonUser: true }; }
+          catch (e) { return { error: e.message || 'The host tool failed.', ...(e.hostCode ? { code: e.hostCode } : {}), nonUser: true }; }
         }
-        if (reviewed(host) && ['list_sessions','read_session','list_projects','list_chats','read_chat','coordination_snapshot','coordination_task'].includes(name)) return { error: 'The reviewed tool catalog is unavailable. No other backend was used.' };
+        if (catalogLatched(host) && (SNAPSHOT_READS.includes(name) || !Object.hasOwn(handlers, name))) return { error: host.catalog?.() ? 'This operation is not supported by the selected host.' : 'The host tool catalog is unavailable. No other backend was used.' };
         if (!Object.hasOwn(handlers, name)) return { error: 'This operation is not supported by the selected host.' };
         if (name === 'read_session' && Object.keys(args).some((key) => key !== 'session')) return { error: 'This host supports only bounded summary reads, not canonical scrollback arguments.' };
         return await handlers[name](args);

@@ -2,7 +2,7 @@
 
 This branch adds a session backend beneath Orbit’s voice tools. Orbit still owns the realtime audio connection, provider credentials, microphone controls, consent checks and moving native character. The selected host owns sessions and execution. No audio is sent over the host protocol.
 
-The first target is **Windows x64**. The [companion preview package](https://github.com/JustSuperHuman/orbit-voice/releases/tag/bro-preview-v1.3.0.1) includes the tested application and Electron runtime. Extract it and run `install-bro-preview.ps1`, then enable Orbit Voice in Bro settings. The script installs a versioned copy under your local Programs folder and registers its paths. The original Orbit beta download uses a separate connection.
+The first target is **Windows x64**. The [companion preview package](https://github.com/JustSuperHuman/orbit-voice/releases/tag/bro-preview-v1.3.0.3) includes the tested application and Electron runtime. Extract it and run `install-bro-preview.ps1`, then enable Orbit Voice in Bro settings. The script installs a versioned copy under your local Programs folder and registers its paths. The original Orbit beta download uses a separate connection.
 
 ## Source and isolation
 
@@ -10,9 +10,10 @@ The first target is **Windows x64**. The [companion preview package](https://git
 - Original project: https://github.com/Cookiebubba/orbit-voice
 - Inspected upstream revision: `f65f437d8df7b5a5b976da6b7bbd79476ebd7232`
 - Branch: `feat/external-host-compatibility`
-- Preview version: `1.3.0-bro-preview.1`
-- Electron app ID: `dev.justsuperhuman.orbit.bro-preview`
-- Windows profile: `%APPDATA%/OrbitBroPreview`
+- Preview version: `1.3.0-bro-preview.3`
+- Electron app ID: `dev.orbit.voice.companion` (Orbit's host-neutral companion identity)
+- Windows profile: `%APPDATA%/OrbitCompanion`
+- Managed launch flag: `--host-managed`; compatibility manifest: `orbit-host-compatibility.json`
 - Managed UI bridge port: assigned automatically on IPv4 loopback; standalone previews use `4327` or an explicit development `PORT`
 
 The preview does not copy upstream settings or secrets, persist a shared environment key into its profile, replace an upstream installation, change startup-at-login, terminate another Orbit, or automatically relaunch after quit. The explicitly paired bro preview can resolve the existing system OpenAI key natively, as described below; other environment settings are not broadly imported. It has its own single-instance lock. A conservative check refuses startup if the standard standalone Orbit port (`4317`) is already occupied; a nonstandard standalone port cannot be discovered this way. Close a conflicting runtime yourself before starting this one.
@@ -42,7 +43,7 @@ Launch the native preview with the **descriptor path**, never its token:
 
 For bro’s local configuration, the executable is the absolute Electron binary path and `application_dir` is `F:/orbit-voice-bro`. The descriptor must already exist and belong to the current user. A development launch can instead use `ORBIT_EXTERNAL_HOST_FILE`; packaged launches require the flag. `--open-settings` also works on a second launch, without creating another voice runtime or silently changing the running app’s pairing. Re-pair a running preview by quitting it and launching it with the new descriptor.
 
-A source-only test profile override is `ORBIT_BRO_PREVIEW_USER_DATA`. The upstream `ORBIT_USER_DATA` variable is deliberately not imported by this preview.
+A source-only test profile override is `ORBIT_COMPANION_USER_DATA`. The upstream `ORBIT_USER_DATA` variable is deliberately not imported by this preview.
 
 In Settings, explicitly choose **OpenAI realtime** or **Grok** for the selected workspace. OpenAI has three source policies: **Saved key**, **System key**, and **Saved or system**. The paired bro preview defaults to saved-or-system; standalone keeps saved-only. A valid separately saved key wins in saved-or-system mode. If its store cannot be read/decrypted, that mode reports an error rather than silently changing billing accounts.
 
@@ -63,7 +64,7 @@ Model and OpenAI voice changes take effect on the next conversation. The microph
 - `selectExternalHost(client)` / `externalHost()` as the optional selected-backend seam.
 - Client methods `start`, `stop`, `snapshot`, `has`, `beginUtterance`, `submit`, `observe`, `focus`, `cancel`, `onResult`, `onProgress`, `results`, and the native-only `stage` snapshot.
 
-Selecting a host changes `createToolRunner` and `toolDefs` in `src/tools.js`; it is not an unused parallel module. Claude-only controls, generic app automation, permission answers, session creation and raw terminal operations are not advertised for this protocol. A disconnected selected host remains selected and fails closed rather than falling back to Claude Desktop automation.
+Selecting a host changes `createToolRunner` and `toolDefs` in `src/tools.js`; it is not an unused parallel module. A host can add read tools through its `tools.v1` catalog (`/tools/catalog`, `/tools/call`); Orbit offers each usable definition to the model and skips any it cannot enforce. Claude-only controls, generic app automation, permission answers, session creation and raw terminal operations are not advertised for this protocol. A disconnected selected host remains selected and fails closed rather than falling back to Claude Desktop automation.
 
 ### Protocol v1
 
@@ -159,7 +160,7 @@ The owner persists independently of bro's optional collision region. Stale, cove
 
 ### Isolated stage acceptance seam
 
-`npm run e2e:avatar-stage` runs the actual external-host client, native avatar module and built Qubit renderer against fixture host/native geometry. It imports no voice runtime, settings/credential store, provider or microphone code. Its windows stay hidden; captures come only from its own Electron compositor. A fresh temporary Electron profile is used unless `ORBIT_BRO_PREVIEW_USER_DATA` explicitly supplies a test profile.
+`npm run e2e:avatar-stage` runs the actual external-host client, native avatar module and built Qubit renderer against fixture host/native geometry. It imports no voice runtime, settings/credential store, provider or microphone code. Its windows stay hidden; captures come only from its own Electron compositor. A fresh temporary Electron profile is used unless `ORBIT_COMPANION_USER_DATA` explicitly supplies a test profile.
 
 For a separately launched isolated real bro GUI, use its protected descriptor and explicitly confirm its process ID:
 
@@ -167,7 +168,7 @@ For a separately launched isolated real bro GUI, use its protected descriptor an
 & "F:/orbit-voice-bro/node_modules/electron/dist/electron.exe" "F:/orbit-voice-bro/scripts/avatar-stage-e2e.mjs" --host-file "<scratch BRO_DIR>/orbit/connection.json" --expected-host-pid <isolated GUI PID>
 ```
 
-The supplied-host mode requires authenticated host name `bro`, the expected published PID, and native HWND/PID/client/DPI validation. The default is still hidden/compositor-only. Do not point it at a user-owned runtime. `--visible` is a separate opt-in for an isolated native overlay and uses inactive, nonfocusable windows; it is not needed for compositor checks. No command moves the OS pointer or sends OS input.
+The supplied-host mode requires the expected published PID and native HWND/PID/client/DPI validation. The default is still hidden/compositor-only. Do not point it at a user-owned runtime. `--visible` is a separate opt-in for an isolated native overlay and uses inactive, nonfocusable windows; it is not needed for compositor checks. No command moves the OS pointer or sends OS input.
 
 The harness waits for a stable physical-body contact with an advertised surface, drops the real body onto a chosen advertised header, asserts the settled support ID, and records multiple PNGs plus `captures.json` in the temporary output path printed at completion. The final fixture run passed 13 captures, including stable `pane-left` support despite a second one-way ledge 9 px above it, suspension, and capability-withdrawal fallback to the old strip without stale colliders. Per-frame state and final failure observations are saved even when an assertion fails. These are renderer/transport/binding checks, **not** Windows stacking, real pointer/click-through, mixed-DPI, virtual-desktop or monitor-removal acceptance. Those checks still require a separately authorized native run.
 
@@ -192,7 +193,7 @@ The full upstream `npm test` also runs native Windows focus, input and Electron 
 
 A separate coordinator run of the existing `avatar-free-e2e` harness passed its avatar visibility, geometry and avatar-kind switching checks. The overall harness still failed its no-child-process assertion: the fixture observed blocked `powershell.exe` and `claude.exe` attempts, plus an existing `brain.js` timer initialization error when process creation was blocked. This is a native harness limitation, not a complete acceptance pass. Standalone production defaults were not changed to silence the fixture. No microphone or paid provider test was performed.
 
-The generated `orbit-bro-compatibility.json` covers SHA-256 hashes of every actual `package.json`, `electron/**`, `src/**` and built `public/**` file, plus source revision, preview identity, protocol range and capabilities. Regenerate it after every source/UI change. It describes this **source application directory**, not a signed packaged release. The generator refuses non-Windows-x64 compatibility claims until native parity exists.
+The generated `orbit-host-compatibility.json` covers SHA-256 hashes of every actual `package.json`, `electron/**`, `src/**` and built `public/**` file, plus source revision, preview identity, protocol range and capabilities. Regenerate it after every source/UI change. It describes this **source application directory**, not a signed packaged release. The generator refuses non-Windows-x64 compatibility claims until native parity exists.
 
 ## macOS and release limits
 

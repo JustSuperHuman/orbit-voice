@@ -1,12 +1,12 @@
 $ErrorActionPreference = 'Stop'
 $sourceRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$manifestPath = Join-Path $sourceRoot 'app\orbit-bro-compatibility.json'
+$manifestPath = Join-Path $sourceRoot 'app\orbit-host-compatibility.json'
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 if ($manifest.schema -ne 1 -or $manifest.channel -ne 'bro-preview' -or $manifest.platform -ne 'win32-x64' -or
     $manifest.version -notmatch '^\d+\.\d+\.\d+-bro-preview\.[0-9A-Za-z.-]+$' -or
     $manifest.source.repository -ne 'https://github.com/JustSuperHuman/orbit-voice') { throw 'This archive is not a compatible Windows Bro preview.' }
 $bro = Get-Command bro.exe -ErrorAction Stop
-$installRoot = Join-Path $env:LOCALAPPDATA 'Programs\OrbitBroPreview'
+$installRoot = Join-Path $env:LOCALAPPDATA 'Programs\OrbitCompanion'
 $build = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.Substring(0, 12).ToLowerInvariant()
 $destination = Join-Path $installRoot ($manifest.version + '-' + $build)
 if (Test-Path -LiteralPath $destination) { $destination += '-' + [guid]::NewGuid().ToString('N').Substring(0, 8) }

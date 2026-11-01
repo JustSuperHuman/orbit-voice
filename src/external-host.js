@@ -11,18 +11,36 @@ export const selectExternalHost = (client) => { selected = client; };
 const id = (v) => typeof v === 'string' && /^[\w.-]{1,160}$/.test(v);
 const REQUIRED = ['sessions.read', 'orchestrator.submit', 'requests.observe'];
 const TERMINAL = new Set(['completed', 'failed', 'cancelled', 'uncertain']);
-const BRO_READS = new Set(['list_sessions', 'read_session', 'list_projects', 'list_chats', 'read_chat', 'coordination_snapshot', 'coordination_task']);
-function validateCatalog(value) {
-  if (value?.schema !== 1 || !id(value.revision) || !Array.isArray(value.tools) || value.tools.length > 24) throw new Error('Invalid reviewed tool catalog.');
-  const names = new Set();
-  for (const t of value.tools) {
-    if (!BRO_READS.has(t?.name) || names.has(t.name) || t.effect !== 'read' || t.capability !== 'bro.tools.v1' || t.schemaVersion !== 1
-      || typeof t.description !== 'string' || t.description.length > 3000 || t.inputSchema?.type !== 'object' || t.inputSchema.additionalProperties !== false
-      || !['discovery', 'pinned-project'].includes(t.scope)) throw new Error('Unsupported reviewed tool definition.');
-    names.add(t.name);
-  }
-  return value;
+
+// Optional host tool catalog. A host publishes its own read tools; Orbit forwards the model's
+// calls with the pinned utterance and never needs a release to learn a new tool name.
+export const TOOLS_CAPABILITY = 'tools.v1';
+// Orbit's own host-mode tools: consent, delivery and character controls stay Orbit's.
+export const RESERVED_TOOLS = new Set(['get_current_session', 'draft_prompt', 'send_draft', 'cancel_draft', 'switch_session', 'request_status', 'cancel_request', 'go_to_sleep', 'avatar', 'observe_host_request']);
+const TOOL_NAME = /^[a-z][a-z0-9_]{0,63}$/;
+const MAX_HOST_TOOLS = 32;
+const CATALOG_BYTES = 256 * 1024;
+const TOOL_RESULT_BYTES = 128 * 1024;
+/** A host tool this client can offer the model, or null. Unknown effects/scopes belong to newer clients. */
+function hostTool(t) {
+  if (!t || typeof t !== 'object' || typeof t.name !== 'string' || !TOOL_NAME.test(t.name) || RESERVED_TOOLS.has(t.name)) return null;
+  if (t.effect !== 'read' || !['discovery', 'pinned'].includes(t.scope)) return null;
+  if (typeof t.description !== 'string' || !t.description.trim() || t.description.length > 3000) return null;
+  const schema = t.inputSchema;
+  if (!schema || typeof schema !== 'object' || Array.isArray(schema) || schema.type !== 'object' || schema.additionalProperties !== false) return null;
+  const encoded = JSON.stringify(schema);
+  if (encoded.length > 8192) return null;
+  return { name: t.name, description: t.description, inputSchema: JSON.parse(encoded), effect: 'read', scope: t.scope };
 }
+/** Skip, never fail on, a definition this client cannot use; one bad entry must not hide the rest. */
+export function validateCatalog(value) {
+  if (value?.schema !== 1 || !id(value.revision) || !Array.isArray(value.tools) || value.tools.length > 128) throw new Error('Invalid host tool catalog.');
+  const counts = new Map();
+  for (const t of value.tools) if (typeof t?.name === 'string') counts.set(t.name, (counts.get(t.name) || 0) + 1);
+  const tools = value.tools.filter((t) => counts.get(t?.name) === 1).map(hostTool).filter(Boolean).slice(0, MAX_HOST_TOOLS);
+  return { schema: 1, revision: value.revision, tools };
+}
+const plain = (text, limit) => String(text).replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ').trim().slice(0, limit);
 
 export function descriptorPath(argv = process.argv, env = process.env) {
   const n = argv.indexOf('--external-host-file');
@@ -50,10 +68,10 @@ export function readDescriptor(file) {
     const ps = `$ErrorActionPreference='Stop'; $p=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${Buffer.from(file).toString('base64')}')); $a=Get-Acl -LiteralPath $p; $s=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; if($a.Owner -ne [Security.Principal.WindowsIdentity]::GetCurrent().Name -and $a.Owner -ne $s){exit 1}; foreach($r in $a.Access){if($r.AccessControlType -eq 'Allow' -and $r.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value -notin @($s,'S-1-5-18','S-1-5-32-544')){exit 1}}`;
     try {
       execFileSync(path.join(process.env.SystemRoot || 'C:/Windows', 'System32/WindowsPowerShell/v1.0/powershell.exe'), ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(ps, 'utf16le').toString('base64')], { windowsHide: true, stdio: 'ignore', timeout: 5000, env: windowsAclEnvironment() });
-    } catch { throw new Error('The host descriptor is not protected for this Windows account. Reconnect from bro.'); }
+    } catch { throw new Error('The host descriptor is not protected for this Windows account. Reconnect from the host app.'); }
   } else if ((stat.mode & 0o077) || stat.uid !== process.getuid()) throw new Error('The host descriptor must be owned by this user with mode 0600.');
   let value;
-  try { value = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error('The host descriptor is invalid. Reconnect from bro.'); }
+  try { value = JSON.parse(fs.readFileSync(file, 'utf8')); } catch { throw new Error('The host descriptor is invalid. Reconnect from the host app.'); }
   return validateDescriptor(value);
 }
 
@@ -70,7 +88,7 @@ export function createExternalHost({ descriptor, fetchImpl = fetch, pollMs = 750
   let d = validateDescriptor(descriptor);
   const epochListeners = new Set();
   const catalogListeners = new Set();
-  let catalog = null, reviewedTools = false;
+  let catalog = null, catalogLatched = false;
   let snapshot = null, cursor = 0, timer = null, stopped = false;
   const requests = new Map();
   const submitted = new Map();
@@ -137,19 +155,33 @@ export function createExternalHost({ descriptor, fetchImpl = fetch, pollMs = 750
     const epoch = d.instanceId;
     try {
       r = await fetchImpl(`${d.url}/orbit/v1${route}`, { method, headers: { Authorization: `Bearer ${d.token}`, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined, redirect: 'error', signal });
-    } catch { throw new Error('The selected host is unavailable. Reconnect from bro; uncertain work is never retried automatically.'); }
-    if (!r.ok) throw new Error(`The selected host rejected the operation (HTTP ${r.status}).`);
-    const reader = r.body.getReader();
-    const chunks = []; let length = 0;
-    for (;;) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      length += value.length;
-      if (length > limit) { await reader.cancel(); throw new Error('Host response exceeded its limit.'); }
-      chunks.push(Buffer.from(value));
+    } catch { throw new Error('The selected host is unavailable. Reconnect from the host app; uncertain work is never retried automatically.'); }
+    const read = async (max) => {
+      const reader = r.body.getReader();
+      const chunks = []; let length = 0;
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        length += value.length;
+        if (length > max) { await reader.cancel(); return null; }
+        chunks.push(Buffer.from(value));
+      }
+      return Buffer.concat(chunks).toString('utf8');
+    };
+    if (!r.ok) {
+      // A host's reason helps the model recover ("use an exact session ID"). It is non-user data.
+      let reason = null;
+      try { reason = JSON.parse(await read(4096))?.error; } catch {}
+      const message = typeof reason?.message === 'string' ? plain(reason.message, 300) : '';
+      const error = new Error(message ? `The selected host declined: ${message}` : `The selected host rejected the operation (HTTP ${r.status}).`);
+      error.status = r.status;
+      if (typeof reason?.code === 'string' && id(reason.code)) error.hostCode = reason.code;
+      throw error;
     }
+    const text = await read(limit);
+    if (text === null) throw new Error('Host response exceeded its limit.');
     if (epoch !== d.instanceId || stopped) throw new Error('The host owner changed. Refresh before using new user intent.');
-    try { return JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { throw new Error('Invalid host response.'); }
+    try { return JSON.parse(text); } catch { throw new Error('Invalid host response.'); }
   }
   const has = (cap) => !!snapshot?.capabilities.includes(cap);
   const requireCap = (cap) => { if (!has(cap)) throw new Error('This operation is not supported by the selected host.'); };
@@ -160,17 +192,17 @@ export function createExternalHost({ descriptor, fetchImpl = fetch, pollMs = 750
     if (s.protocol !== 1 || s.instanceId !== d.instanceId || !Array.isArray(s.capabilities) || REQUIRED.some((c) => !s.capabilities.includes(c)) || !Array.isArray(s.sessions) || s.sessions.length > 512 || s.sessions.some((s) => !id(s.id) || typeof s.generation !== 'string')) throw new Error('The selected host is not compatible with protocol v1.');
     const previousCapabilities = JSON.stringify(snapshot?.capabilities || []);
     snapshot = s;
-    reviewedTools ||= has('bro.tools.v1'); // same-pairing withdrawal never enables an older backend
+    catalogLatched ||= has(TOOLS_CAPABILITY); // same-pairing withdrawal never enables the snapshot readers
     const previousCatalog = catalog;
     const revision = s.toolCatalogRevision;
     if (revision !== undefined && !id(revision)) catalog = null;
-    else if (has('bro.tools.v1') && (!catalog || revision && revision !== catalog.revision)) {
+    else if (has(TOOLS_CAPABILITY) && (!catalog || revision && revision !== catalog.revision)) {
       try {
-        const discovered = validateCatalog(await call('GET', '/tools', undefined, { limit: 64 * 1024 }));
-        if (revision && discovered.revision !== revision) throw new Error('Stale reviewed tool catalog.');
+        const discovered = validateCatalog(await call('GET', '/tools/catalog', undefined, { limit: CATALOG_BYTES }));
+        if (revision && discovered.revision !== revision) throw new Error('Stale host tool catalog.');
         catalog = discovered;
       } catch { catalog = null; } // catalog failure must not end the independent voice/control lease
-    } else if (!has('bro.tools.v1')) catalog = null;
+    } else if (!has(TOOLS_CAPABILITY)) catalog = null;
     if (epoch !== d.instanceId || stopped) throw new Error('Host owner changed during discovery.');
     if (previousCatalog !== catalog || previousCapabilities !== JSON.stringify(s.capabilities)) for (const fn of catalogListeners) fn(catalog);
     onSnapshot(s);
@@ -222,15 +254,17 @@ export function createExternalHost({ descriptor, fetchImpl = fetch, pollMs = 750
     has,
     snapshot: () => snapshot,
     catalog: () => catalog,
-    reviewedToolsRequired: () => reviewedTools,
+    catalogLatched: () => catalogLatched,
     refresh,
     onCatalog(fn) { catalogListeners.add(fn); return () => catalogListeners.delete(fn); },
-    async readTool(name, args, utteranceId = null) {
-      requireCap('bro.tools.v1');
-      const definition = catalog?.tools.find((t) => t.name === name && t.effect === 'read');
-      if (!definition) throw new Error('This reviewed tool is not available.');
+    async callTool(name, args, utteranceId = null) {
+      requireCap(TOOLS_CAPABILITY);
+      const definition = catalog?.tools.find((t) => t.name === name);
+      if (!definition) throw new Error('This host tool is not available.');
       if (utteranceId && (!heard.has(utteranceId) || captureEpochs.get(utteranceId) !== d.instanceId)) throw new Error('Use an already registered current-owner utterance.');
-      return call('POST', '/tools/read', { id: crypto.randomUUID(), catalogRevision: catalog.revision, utteranceId, name, arguments: args });
+      const result = await call('POST', '/tools/call', { id: crypto.randomUUID(), catalogRevision: catalog.revision, utteranceId, name, arguments: args }, { limit: TOOL_RESULT_BYTES });
+      if (!result || typeof result !== 'object' || Array.isArray(result)) throw new Error('Invalid host tool result.');
+      return result;
     },
     pairing: () => ({ lineage: d.lineage, ownerEpoch: d.ownerEpoch }),
     onEpoch(fn) { epochListeners.add(fn); return () => epochListeners.delete(fn); },

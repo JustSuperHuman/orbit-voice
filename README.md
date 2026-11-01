@@ -1,3 +1,9 @@
+## Local bro compatibility preview
+
+This branch adds an optional external-host adapter and OpenAI realtime voice. Download the [Windows x64 companion preview](https://github.com/JustSuperHuman/orbit-voice/releases/tag/bro-preview-v1.3.0.1), extract it and run `install-bro-preview.ps1` to register it with Bro. It includes its own runtime. Stock Orbit downloads below use a separate connection. Setup, the wire contract, verification results and platform limitations are in [External host integration](docs/EXTERNAL-HOST.md).
+
+The original Orbit documentation and attribution follow.
+
 <p align="center"><a href="https://cookiebubba.github.io/orbit-voice/"><img src="docs/orbit-hero.gif" width="640" alt="Orbit: the Orbit wordmark with Grok and Claude under it, and Qubit, Orbit's square one-eyed avatar, hopping, flipping and changing colour below"></a></p>
 
 <p align="center"><b>Talk to Claude Code, hands-free.</b><br>

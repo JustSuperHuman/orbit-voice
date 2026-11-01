@@ -35,9 +35,9 @@ public struct LaunchConfig: Sendable, Equatable {
       core = URL(fileURLWithPath: env["ORBIT_CORE_DIR"] ?? FileManager.default.currentDirectoryPath)
       node = URL(fileURLWithPath: env["ORBIT_NODE"] ?? "/opt/homebrew/bin/node")
     }
-    let defaultProfile = home.appendingPathComponent("Library/Application Support/Orbit Native")
+    let defaultProfile = home.appendingPathComponent("Library/Application Support/OrbitBroPreviewNative")
     let profile = testing && env["ORBIT_PROFILE_DIR"].map({ !$0.isEmpty }) == true ? URL(fileURLWithPath: env["ORBIT_PROFILE_DIR"]!) : defaultProfile
-    var port = 4317
+    var port = 4327
     if testing, let p = env["PORT"].flatMap(Int.init), (1025...65535).contains(p) { port = p }
     var passed: [String: String] = [:]
     if testing {

@@ -1,7 +1,7 @@
 {
-  "name": "orbit-voice",
-  "productName": "Orbit",
-  "version": "1.3.0-beta.4",
+  "name": "orbit-voice-bro-preview",
+  "productName": "Orbit Bro Preview",
+  "version": "1.3.0-bro-preview.1",
   "description": "A hands-free voice companion for Claude Code Desktop, powered by Grok Voice. Hear what your sessions are doing and dictate prompts into them.",
   "type": "module",
   "private": true,
@@ -15,15 +15,20 @@
   },
   "scripts": {
     "app": "electron .",
+    "compatibility:manifest": "node scripts/compatibility-manifest.mjs",
+    "test:compatibility": "node --test test/external-host.test.js test/openai-realtime.test.js test/external-avatar.test.js && node --import ./test/fuzz/register.mjs --test test/sandboxed/external-runtime.test.js",
+    "build:preview": "npm run build:ui && npm run compatibility:manifest",
+    "package:bro-preview": "node scripts/package-bro-preview.mjs",
     "web": "node src/server.js",
     "build:ui": "npm --prefix ui ci --no-audit --no-fund && npm --prefix ui run build",
     "icons": "electron scripts/make-icons.mjs",
     "icons:mac": "electron scripts/make-icons.mjs --mac",
     "check": "node src/selftest.js",
-    "dist": "npm run build:ui && node scripts/fetch-model.mjs && electron-builder --win --publish never",
+    "dist": "npm run build:preview && node scripts/fetch-model.mjs && electron-builder --win --publish never",
     "mac:helper": "node scripts/build-mac-helper.mjs",
     "fetch-model": "node scripts/fetch-model.mjs",
-    "test": "node --test test/*.test.js && node --import ./test/fuzz/register.mjs --test test/sandboxed/*.test.js",
+    "test": "node --test test/*.test.js && npm run test:sandboxed",
+    "test:sandboxed": "node --import ./test/fuzz/register.mjs --test test/sandboxed/*.test.js",
     "fuzz": "node --import ./test/fuzz/register.mjs test/fuzz/fuzz.mjs",
     "parity": "node parity/run.mjs",
     "parity:audio": "node parity/fetch-voice-models.mjs && node parity/gen-audio.mjs",
@@ -32,6 +37,7 @@
     "e2e:wake": "electron scripts/wake-audio-e2e.mjs",
     "e2e:avatar": "electron scripts/avatar-e2e.mjs",
     "e2e:avatar-free": "electron scripts/avatar-free-e2e.mjs",
+    "e2e:avatar-stage": "electron scripts/avatar-stage-e2e.mjs",
     "e2e:audio": "electron scripts/audio-e2e.mjs",
     "e2e:anywhere": "electron scripts/anywhere-e2e.mjs",
     "e2e:mouse": "electron scripts/mouse-e2e.mjs",
@@ -56,8 +62,8 @@
     "electron-builder": "26.17.0"
   },
   "build": {
-    "appId": "dev.orbit.voice",
-    "productName": "Orbit",
+    "appId": "dev.justsuperhuman.orbit.bro-preview",
+    "productName": "Orbit Bro Preview",
     "copyright": "Copyright © 2026 Orbit contributors",
     "files": [
       "electron/**",
@@ -67,6 +73,7 @@
       "package.json",
       "LICENSE",
       "THIRD_PARTY_NOTICES.md",
+      "orbit-bro-compatibility.json",
       "!src/selftest.js",
       "!electron/selftest.js"
     ],
@@ -92,7 +99,7 @@
         }
       ],
       "icon": "build/icon.ico",
-      "artifactName": "Orbit-Setup-${version}.${ext}"
+      "artifactName": "Orbit-Bro-Preview-Setup-${version}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -100,13 +107,13 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "Orbit",
+      "shortcutName": "Orbit Bro Preview",
       "deleteAppDataOnUninstall": false
     },
     "publish": [
       {
         "provider": "github",
-        "owner": "Cookiebubba",
+        "owner": "JustSuperHuman",
         "repo": "orbit-voice",
         "releaseType": "release"
       }

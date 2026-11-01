@@ -23,8 +23,8 @@ for a in "$@"; do
   esac
 done
 
-NAME="Orbit Native"
-BUNDLE_ID="dev.orbit.voice.native"
+NAME="Orbit Bro Preview Native"
+BUNDLE_ID="dev.justsuperhuman.orbit.bro-preview.native"
 VERSION="$(node -p "require('$ROOT/package.json').version")"
 APP="$HERE/dist/$NAME.app"
 NODE_BIN="$(command -v node)"

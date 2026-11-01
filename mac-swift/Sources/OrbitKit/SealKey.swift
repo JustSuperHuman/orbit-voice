@@ -5,8 +5,8 @@ import Foundation
 import Security
 
 public enum SealKey {
-  public static let service = "Orbit Native Safe Storage"
-  public static let account = "Orbit Native"
+  public static let service = "Orbit Bro Preview Native Safe Storage"
+  public static let account = "Orbit Bro Preview Native"
 
   public enum Failure: Error, Equatable { case keychain(OSStatus), random }
 

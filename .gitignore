@@ -4,6 +4,7 @@ node_modules/
 # build output
 /public/
 dist/
+/orbit-bro-compatibility.json
 *.tsbuildinfo
 
 # local secrets and per-user state (never commit)

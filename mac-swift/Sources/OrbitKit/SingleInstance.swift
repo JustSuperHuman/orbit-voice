@@ -3,7 +3,7 @@
 import Foundation
 
 public final class SingleInstance: @unchecked Sendable {
-  public static let showNotification = Notification.Name("dev.orbit.voice.native.show")
+  public static let showNotification = Notification.Name("dev.justsuperhuman.orbit.bro-preview.native.show")
   private let fd: Int32
   public let path: String
 

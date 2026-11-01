@@ -203,7 +203,7 @@ public struct UpdateFeed: Sendable {
   /** https://api.github.com/repos/<owner>/<repo> */
   public var api: URL
   public init(web: URL, api: URL) { self.web = web; self.api = api }
-  public static let github = UpdateFeed(web: URL(string: "https://github.com/Cookiebubba/orbit-voice")!, api: URL(string: "https://api.github.com/repos/Cookiebubba/orbit-voice")!)
+  public static let github = UpdateFeed(web: URL(string: "https://github.com/JustSuperHuman/orbit-voice")!, api: URL(string: "https://api.github.com/repos/JustSuperHuman/orbit-voice")!)
 }
 
 private struct UpdateFailure: Error { var message: String }
@@ -241,7 +241,7 @@ public final class UpdateChecker {
   /** Orbit Native's feed in each GitHub release (Electron's is latest-mac.yml). */
   public nonisolated static let feedFile = "latest-mac-native.yml"
   /** The bundle identifier an update must have. */
-  public nonisolated static let bundleID = "dev.orbit.voice.native"
+  public nonisolated static let bundleID = "dev.justsuperhuman.orbit.bro-preview.native"
   /** A release build may replace itself (build-app.sh writes this key for a Developer ID build). */
   public nonisolated static var releaseInstallAllowed: Bool {
     ProcessInfo.processInfo.environment["ORBIT_UPDATE_INSTALL"] == "1" || (Bundle.main.object(forInfoDictionaryKey: "OrbitUpdateInstall") as? Bool) == true
@@ -286,7 +286,7 @@ public final class UpdateChecker {
   public func setAuto(_ on: Bool, first: Duration = UpdateChecker.firstCheckDelay, every: Duration = UpdateChecker.checkEvery) {
     timer?.cancel()
     timer = nil
-    guard isPackaged, on else { return }
+    guard isPackaged, on, !currentVersion.contains("bro-preview") else { return }
     timer = Task { [weak self] in
       try? await Task.sleep(for: first)
       while !Task.isCancelled {
@@ -332,7 +332,7 @@ public final class UpdateChecker {
   /** "Check now" (and the timer): find a newer release and download it. */
   @discardableResult
   public func check(download: Bool = true) async -> UpdateState {
-    guard isPackaged, ![.checking, .downloading, .ready].contains(state.status) else { return state }
+    guard isPackaged, !currentVersion.contains("bro-preview"), ![.checking, .downloading, .ready].contains(state.status) else { return state }
     set(UpdateState(status: .checking))
     do {
       guard let (info, base) = try await findRelease(), let v = SemVer(info.version), let c = SemVer(currentVersion), c < v else {

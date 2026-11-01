@@ -33,6 +33,7 @@
     "parity": "node parity/run.mjs",
     "parity:audio": "node parity/fetch-voice-models.mjs && node parity/gen-audio.mjs",
     "test:native": "node --test parity/test/match.test.mjs mac-swift/sidecar/sidecar.test.mjs",
+    "e2e:managed": "node scripts/managed-runtime-acceptance.mjs",
     "native:app": "bash mac-swift/scripts/build-app.sh",
     "e2e:wake": "electron scripts/wake-audio-e2e.mjs",
     "e2e:avatar": "electron scripts/avatar-e2e.mjs",

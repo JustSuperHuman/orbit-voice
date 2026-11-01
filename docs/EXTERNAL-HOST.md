@@ -129,6 +129,8 @@ Those sources document the GA Realtime dialect, not the legacy bro `gpt-live-1` 
 
 Settings offers **Desktop** and **Stay with bro**. Both reuse `electron/avatar.js`, `electron/avatar-host.js` and the original Qubit/Buddy engine, director, pickup/drag/throw physics, transparent click-through and voice-state/emote runtime. No replacement sprite, static child webview or development-only free-avatar flag is used for the integration.
 
+Qubit's adjacent mic control follows the audio owner's capture and input gate: off, connecting, listening, muted, or speaking with the mic on/off. Start wakes or unmutes the existing conversation; Stop hangs up and releases the microphone. Missing provider setup opens settings. Single-click keeps the original wake behavior, right-click keeps the orb's sleep/wake action, and double-click opens settings without also starting voice. Dragging remains available with reduced motion; release drops him without an inertial throw. Only the body and the visible control receive mouse input.
+
 The selected host may publish `mode:"desktop"` or `mode:"attached"`. Orbit applies the initial host mode only after config and native shell initialization, then reacts to subsequent host-mode changes through the existing character/settings transition. While a valid mode is published, bro owns that preference: Orbit reflects it and directs placement changes back to bro rather than offering a competing local toggle. Missing or invalid modes retain local controls. Unchanged modes do not repeat the character transition. Standalone Orbit does not participate in this synchronization.
 
 Desktop uses Orbit’s existing bounded screen strip; it is not unrestricted desktop roaming. Attached mode uses the existing native focus/window watcher. The HWND must resolve to the advertised PID before a guest is created. PID-bearing move events hide the guest on handle reuse. Minimize, cloak, geometry and negative-coordinate placement pass through the existing native host. Host closure/disconnect removes attached guests, and stale async validation cannot recreate them.
@@ -174,6 +176,9 @@ The harness waits for a stable physical-body contact with an advertised surface,
 ```powershell
 npm run test:compatibility
 npm run test:sandboxed
+npm run e2e:managed
+npx --no-install electron scripts/avatar-auto-e2e.mjs
+npx --no-install electron scripts/avatar-auto-e2e.mjs --interactions-only --reduced-motion
 npm --prefix ui run build
 npm run compatibility:manifest
 git diff --check
@@ -193,4 +198,4 @@ The generated `orbit-bro-compatibility.json` covers SHA-256 hashes of every actu
 
 The native Swift engine’s standalone voice default remains unchanged. Its profile, bundle, Keychain and updater identity are isolated, but it does **not** implement the new OpenAI provider, descriptor/host tools or native bro attachment. No Swift build or macOS runtime acceptance was performed on Windows. Do not advertise macOS compatibility from this preview.
 
-No microphone, recording, live API, paid speech roundtrip, release installation, commit, push, PR submission or publication has been performed as part of this patch. A genuine speech → durable request → correlated spoken result and the native character checks are still required before calling the integration accepted.
+The compatibility preview is distributed separately from upstream Orbit. Hidden acceptance uses fake audio and provider connections. A real microphone, paid speech roundtrip and full spoken request → durable request → correlated spoken result remain outside those checks. Native stacking, mixed-DPI and virtual-desktop checks also require separate acceptance.

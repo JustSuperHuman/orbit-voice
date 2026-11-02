@@ -38,6 +38,9 @@ for (const installed of production.trim().split(/\r?\n/)) {
   const parts = relative.split(path.sep);
   dependencies.add(parts[0].startsWith('@') ? parts.slice(0, 2).join(path.sep) : parts[0]);
 }
+// npm can rewrite or redact the paths it prints; never ship a companion without its runtime dependencies.
+const missing = Object.keys(pkg.dependencies || {}).filter((name) => !dependencies.has(name.split('/').join(path.sep)));
+if (missing.length) throw new Error(`Production dependencies were not resolved: ${missing.join(', ')}. Package from a path npm prints unchanged.`);
 for (const dependency of dependencies) fs.cpSync(path.join(root, 'node_modules', dependency), path.join(app, 'node_modules', dependency), { recursive: true });
 fs.cpSync(path.join(root, 'node_modules/electron/dist'), path.join(bundle, 'runtime'), { recursive: true });
 fs.copyFileSync(path.join(root, 'scripts/install-bro-preview.ps1'), path.join(bundle, 'install-bro-preview.ps1'));
